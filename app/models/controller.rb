@@ -34,8 +34,9 @@ class Controller
   def welcome_screen
     greetings
     prompt.select("Are you a patient or a therapist?") do |menu|
-      menu.choice "Patient", -> {Patient}
-      menu.choice "Therapist", -> {Therapist}
+      menu.choice "Patient", -> { self.user = Patient; self.login_page }
+      menu.choice "Therapist", -> { self.user = Therapist; self.login_page }
+      menu.choice "Quit", -> { self.quit }
     end
   end
 
@@ -44,31 +45,50 @@ class Controller
     prompt.select("What would you like to do?") do |menu|
       menu.choice "Register", -> { self.register}
       menu.choice "Login", -> { self.login}
+      menu.choice "Back to Welcome Screen", -> { self.welcome_screen }
+      menu.choice "Quit", -> {self.quit}
     end
   end
   
+
+# logged_in_user = controller_instance.login_page
+
+# until !logged_in_user.nil?
+#   sleep 2
+#   logged_in_user = controller_instance.login_page
+# end
+
   def login
-    puts "What is your name?" 
-    name = gets.chomp
-    # pass = TTY::Prompt.new.mask("What is your password?")
-    if self.user.find_by(name: name)
-      self.user.find_by(name: name)
-    else
-      puts "Sorry, you don't exist."
+    greetings
+    puts "#{class_to_string(self.user)} Login\n"
+    name = prompt.ask("Please Enter Your Name\n")
+    until self.user.find_by(name: name)
+      puts "Sorry, you don't exist by that name"
+      sleep 1
+      self.login
     end 
+    self.user = self.user.find_by(name: name)
+    dashboard
   end
 
+  def logout
+    self.user = nil
+    welcome_screen
+  end
+  
+
   def register
+    greetings
+    puts "Register a #{class_to_string(self.user)}.\n"
     puts "let's sign you up!"
-    puts "What is your name?"
-    name = gets.chomp
-    puts "Aight, what's your password?"
-    pass = gets.chomp
-    if self.user.find_by(name: name)
-      puts "Sorry, a #{class_to_string(self.user)} with that name exists"
-    else
-      user.create(name: name)
+    name = prompt.ask("Please Enter Your Name\n")
+    while self.user.find_by(name: name)
+      puts "Sorry, a #{class_to_string(self.user)} exists by that name."
+      sleep 1
+      self.register
     end
+    self.user = self.user.create(name: name)
+    dashboard
   end
   
   def appointment_list_view(appointment)
@@ -95,6 +115,7 @@ class Controller
     end.chain(
       [
         { "Create an Appointment" => "Create" },
+        { "Logout" => "Logout" },
         { "Quit" => "Quit" }
       ]
     ).to_a 
@@ -104,6 +125,8 @@ class Controller
       create_appointment
     when "Quit"
       quit
+    when "Logout"
+      logout
     else
       self.appointment = Appointment.find(selection)
       self.view_appointment
@@ -140,10 +163,13 @@ class Controller
     greetings
     counterpart_name = prompt.ask("Please enter your #{self.class_to_string(counterpart_class)}'s name")  ## stretch goal: select a patient
     self.counterpart_instance = counterpart_class.find_by(name: counterpart_name)
-    until counterpart_instance
+    until self.counterpart_instance
       puts "I couldn't find that #{self.class_to_string(counterpart_class)}.\n"
       counterpart_name = prompt.ask("Please enter your #{self.class_to_string(counterpart_class)}'s name")
-      countepart_instance = counterpart_class.find_by(name: counterpart_name)
+      self.counterpart_instance = counterpart_class.find_by(name: counterpart_name)
+      
+      # binding.pry
+      
     end
     prompt.ask("When would you like to schedule this appointment for?")
     self.appointment = Appointment.create(
@@ -178,13 +204,14 @@ class Controller
       key(:status).ask("Enter New Status")
       key(:note).ask("Enter a New Note")
     end
-    scheduled_time = Time.now + rand(10.days) if hash[:scheduled_time]
-    appointment_counterpart = appointment_counterpart.class.find_by(name: hash[counterpart_class_sym]) if appointment_counterpart.class.find_by(name: hash[counterpart_class_sym])
-    status = hash[:status] if hash[:status]
-    note = hash[:note] if hash[:note]
+    scheduled_time = hash[:scheduled_time] ? Time.now + rand(10.days) : appointment.scheduled_time
+    # new_appointment_counterpart = appointment_counterpart.class.find_by(name: hash[counterpart_class_sym]) if appointment_counterpart.class.find_by(name: hash[counterpart_class_sym])
+    new_appointment_counterpart = appointment_counterpart.class.find_by(name: hash[counterpart_class_sym]) ? appointment_counterpart.class.find_by(name: hash[counterpart_class_sym]) : appointment_counterpart
+    status = hash[:status] ? hash[:status] : appointment.status
+    note = hash[:note] ? hash[:note] : appointment.note
     appointment.update(
       scheduled_time: scheduled_time,
-      counterpart_class_sym => appointment_counterpart,
+      counterpart_class_sym => new_appointment_counterpart,
       status: status,
       note: note
     )    
@@ -210,6 +237,7 @@ class Controller
     system("clear")
     sleep 0.5
     puts "Bye bye!"
+    sleep 1
     system("clear")
   end
   
